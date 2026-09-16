@@ -1,0 +1,20 @@
+{
+  "name": "cupom-search",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Busca e avalia cupons ativos a partir do link de um produto",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node src/api/server.ts",
+    "dev": "node --watch src/api/server.ts",
+    "test": "node --test 'tests/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cupom Search</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Cupom Search</h1>
+      <p class="tagline">Cole o link do produto e veja quais cupons têm chance real de funcionar.</p>
+    </header>
+
+    <main>
+      <form id="search-form">
+        <label class="sr-only" for="url">Link do produto</label>
+        <input
+          id="url"
+          name="url"
+          type="url"
+          required
+          placeholder="https://www.pichau.com.br/..."
+          autocomplete="off"
+        />
+        <button type="submit" id="submit">Buscar cupons</button>
+      </form>
+
+      <p id="status" role="status"></p>
+      <section id="product" hidden></section>
+      <div id="warnings"></div>
+      <section id="results"></section>
+
+      <details id="stores-box">
+        <summary>Lojas suportadas</summary>
+        <ul id="stores"></ul>
+      </details>
+    </main>
+
+    <footer>
+      <p>
+        A confiança é uma <strong>estimativa</strong> a partir de regras do cupom, frescor da fonte e
+        do que a comunidade relatou — o cupom só é confirmado de verdade no checkout da loja.
+      </p>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
