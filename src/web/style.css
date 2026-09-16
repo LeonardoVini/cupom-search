@@ -138,3 +138,19 @@ footer { margin-top: 40px; color: var(--muted); font-size: 0.85rem; }
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+.badge.verified { border-color: var(--accent); color: var(--accent); }
+
+a.outbound, a.go {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+a.go { margin-top: 0; }
+a.outbound:hover, a.go:hover { border-color: var(--accent); }

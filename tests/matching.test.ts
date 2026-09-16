@@ -1,7 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { matchCoupon, rankMatches, estimateSavings, wilsonLowerBound, freshnessScore } from '../src/core/matching.ts';
-import type { Coupon, Product } from '../src/core/types.ts';
+import {
+  matchCoupon,
+  rankMatches,
+  estimateSavings,
+  evidenceScore,
+  freshnessScore,
+  medianDiscount,
+} from '../src/core/matching.ts';
+import type { Coupon, Evidence, Product } from '../src/core/types.ts';
+import { emptyEvidence } from '../src/core/types.ts';
 
 const NOW = new Date('2026-09-16T12:00:00Z');
 const daysFromNow = (days: number) => new Date(NOW.getTime() + days * 86_400_000).toISOString();
@@ -110,25 +118,97 @@ test('categoria restrita sem categoria lida vira ressalva, não bloqueio', () =>
   assert.match(match.blockers.join(' '), /não consegui ler a categoria/);
 });
 
-test('feedback positivo aumenta a confiança; negativo derruba', () => {
+function evidence(overrides: Partial<Evidence> = {}): Evidence {
+  return { ...emptyEvidence('pichau:TESTE10'), ...overrides };
+}
+
+test('relato positivo aumenta a confiança; negativo derruba', () => {
   const neutral = matchCoupon(coupon(), product(), { now: NOW });
   const good = matchCoupon(coupon(), product(), {
     now: NOW,
-    feedback: { worked: 20, failed: 0, lastWorkedAt: daysFromNow(-1) },
+    evidence: evidence({ reports: { worked: 20, failed: 0 }, lastSuccessAt: daysFromNow(-1) }),
   });
   const bad = matchCoupon(coupon(), product(), {
     now: NOW,
-    feedback: { worked: 0, failed: 20, lastWorkedAt: null },
+    evidence: evidence({ reports: { worked: 0, failed: 20 } }),
   });
   assert.ok(good.confidence > neutral.confidence);
   assert.ok(bad.confidence < neutral.confidence);
 });
 
-test('wilsonLowerBound penaliza amostra pequena', () => {
-  assert.equal(wilsonLowerBound(0, 0), 0.5);
-  assert.ok(wilsonLowerBound(1, 0) < wilsonLowerBound(50, 0));
-  assert.ok(wilsonLowerBound(50, 0) > 0.9);
-  assert.ok(wilsonLowerBound(0, 10) < 0.1);
+test('teste no checkout pesa mais que relato manual', () => {
+  const reported = matchCoupon(coupon(), product(), {
+    now: NOW,
+    evidence: evidence({ reports: { worked: 5, failed: 0 }, lastAttemptAt: daysFromNow(-1) }),
+  });
+  const validated = matchCoupon(coupon(), product(), {
+    now: NOW,
+    evidence: evidence({
+      checkout: { success: 5, failure: 0 },
+      lastSuccessAt: daysFromNow(-1),
+      lastAttemptAt: daysFromNow(-1),
+    }),
+  });
+  assert.ok(validated.confidence > reported.confidence);
+  assert.match(validated.reasons.join(' '), /Aplicado com sucesso no checkout/);
+});
+
+test('checkout que falhou sempre derruba a confiança e vira bloqueio', () => {
+  const match = matchCoupon(coupon(), product(), {
+    now: NOW,
+    evidence: evidence({ checkout: { success: 0, failure: 6 }, lastAttemptAt: daysFromNow(-1) }),
+  });
+  assert.ok(match.confidence < 0.2);
+  assert.match(match.blockers.join(' '), /falhou todas as vezes/);
+});
+
+test('validação antiga pesa menos que validação recente', () => {
+  const recent = matchCoupon(coupon(), product(), {
+    now: NOW,
+    evidence: evidence({
+      checkout: { success: 6, failure: 0 },
+      lastSuccessAt: daysFromNow(-1),
+      lastAttemptAt: daysFromNow(-1),
+    }),
+  });
+  const old = matchCoupon(coupon(), product(), {
+    now: NOW,
+    evidence: evidence({
+      checkout: { success: 6, failure: 0 },
+      lastSuccessAt: daysFromNow(-90),
+      lastAttemptAt: daysFromNow(-90),
+    }),
+  });
+  assert.ok(recent.confidence > old.confidence);
+});
+
+test('desconto observado aparece no resultado', () => {
+  const match = matchCoupon(coupon(), product(), {
+    now: NOW,
+    evidence: evidence({
+      checkout: { success: 3, failure: 0 },
+      lastSuccessAt: daysFromNow(-1),
+      lastAttemptAt: daysFromNow(-1),
+      discountSamples: [100, 130, 120],
+    }),
+  });
+  assert.equal(match.observedDiscount, 120);
+  assert.match(match.reasons.join(' '), /Desconto observado no carrinho/);
+});
+
+test('medianDiscount lida com amostra par e vazia', () => {
+  assert.equal(medianDiscount([]), null);
+  assert.equal(medianDiscount([10, 20, 30, 40]), 25);
+  assert.equal(medianDiscount([7]), 7);
+});
+
+test('evidenceScore não deixa amostra pequena virar certeza', () => {
+  assert.equal(evidenceScore(0, 0), 0.5);
+  // Um único sucesso sai do neutro, mas longe de virar certeza.
+  assert.ok(evidenceScore(1, 0) > 0.6 && evidenceScore(1, 0) < 0.7);
+  assert.ok(evidenceScore(1, 0) < evidenceScore(50, 0));
+  assert.ok(evidenceScore(50, 0) > 0.95);
+  assert.ok(evidenceScore(0, 20) < 0.05);
 });
 
 test('freshnessScore decai com o tempo', () => {

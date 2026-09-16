@@ -1,132 +1,154 @@
 # Cupom Search
 
-Cole o link de um produto (ex.: uma mesa na Pichau) e receba os cupons conhecidos
-para aquela loja, **filtrados pelas regras que se aplicam àquele produto** e
-ordenados por economia estimada e confiança.
+Cole o link de um produto (ex.: uma mesa na Pichau) e veja quais cupons têm chance
+real de funcionar — filtrados pelas regras que se aplicam **àquele** produto,
+ordenados por economia e confiança. A extensão de navegador fecha o ciclo:
+testa os códigos no seu carrinho e transforma estimativa em desconto confirmado.
 
 ```
-Mesa Gamer Pichau Kaiju 140cm Preta
-Pichau · R$ 1.299,90 · moveis, mesas
+Mesa Gamer Pichau Kaiju 140cm · R$ 1.299,90
 
-✅ DEMO-PERIFERICOS10     64%  -R$ 129,99  → R$ 1.169,91
+✅ DEMO-PERIFERICOS10   64%  -R$ 129,99  → R$ 1.169,91
    + Produto atinge o mínimo de R$ 300,00.
    + Categoria compatível (moveis, escritorio, informatica).
-❌ DEMO-HARDWARE15         9%
+❌ DEMO-HARDWARE15       9%
    - Restrito a placa de video e o produto não parece se encaixar.
+
+--- depois que a extensão testou no carrinho ---
+sem teste:  64% de confiança, economia estimada
+com teste:  79% de confiança, desconto observado R$ 129,99
+            "Aplicado com sucesso no checkout 4x (último há 1 dia)."
 ```
 
-## É possível? Sim — com um porém importante
+## O problema real (e como o sistema resolve)
 
-Tudo que é mecânico funciona bem: identificar a loja pelo link, ler nome, preço e
-categoria da página (a maioria das lojas publica isso em JSON-LD, o mesmo dado que
-o Google usa), reunir cupons e cruzar com as regras de cada um.
+Achar cupom é fácil. **Saber se ele ainda está ativo é que é o produto** — não
+existe API de validação, só o checkout da loja sabe. Testar do servidor esbarra
+em Cloudflare e nos termos de uso das lojas.
 
-O difícil não é *achar* cupom, é **garantir que ele está ativo**. Cupom não tem API
-pública de validação: só o checkout da loja sabe. Existem três caminhos, e cada um
-tem um preço:
+A saída é onde Honey, Cuponomia e Méliuz chegaram: **testar dentro do navegador do
+usuário**, no carrinho real dele. Sem robô, sem bloqueio — e ainda descobre o
+desconto exato em reais. É o que a pasta `extension/` faz.
 
-| Caminho | Como funciona | Custo |
+O sistema combina três sinais, nesta ordem de força:
+
+| Sinal | De onde vem | Peso |
 | --- | --- | --- |
-| **Feed de afiliados** (Awin, Lomadee, Rakuten, Admitad) | a própria loja publica código, validade e regras | legítimo e confiável, mas só pega cupom oficial e exige cadastro como afiliado |
-| **Comunidade** | usuário relata "funcionou / não funcionou" | barato e honesto, mas precisa de tráfego para o sinal existir |
-| **Teste automático no checkout** | um robô aplica o código no carrinho | é o que dá certeza — e é o que trava: proteção anti-bot (Cloudflare), ToS da loja e custo de infra |
+| **Teste no checkout** | extensão aplica o código no carrinho e mede o total | até 85%, decaindo com o tempo |
+| **Relato manual** | botão "funcionou / não funcionou" no site | até 35% |
+| **Frescor + fonte** | há quanto tempo a fonte confirmou, e quanto ela vale | base |
 
-A saída que Honey, Cuponomia e Méliuz usam para o terceiro caminho é uma
-**extensão de navegador**: o teste roda dentro da sessão do próprio usuário, no
-carrinho real dele. Sem bot, sem bloqueio, e ainda descobre o desconto exato.
-É o caminho que este projeto deixa preparado (`checkoutCouponField` no catálogo
-de lojas), não o que o MVP faz.
-
-Por isso o produto aqui **não promete "cupom ativo"** — ele mostra uma confiança
-explicada. Prometer certeza que não se tem é o jeito mais rápido de perder o
-usuário na segunda tentativa frustrada.
-
-### Sobre scraping de sites de cupom
-
-Raspar Cuponomia/Pelando/Promobit é tecnicamente trivial e juridicamente ruim:
-viola os termos de uso deles, e os dados vêm sujos (muito cupom vencido). O
-provider de afiliado (`src/core/providers/affiliate.ts`) é o caminho recomendado e
-já está implementado — basta configurar as credenciais.
-
-### O modelo de negócio não é assinatura
-
-Vale dizer em voz alta: cobrar do usuário final por lista de cupom não costuma
-funcionar, porque a informação é gratuita em cinco sites concorrentes. Quem ganha
-dinheiro nesse mercado ganha **comissão de afiliado** — o usuário clica no seu link,
-compra, a loja te paga. Isso muda o produto: o link de saída importa mais que a
-busca, e o cadastro nas redes de afiliados é pré-requisito, não detalhe.
-
-Um nicho defensável costuma render mais que competir de frente com o Méliuz. Por
-exemplo: hardware/setup (Pichau, KaBuM!, Terabyte), onde o público pesquisa muito
-antes de comprar e o ticket é alto.
+Três tentativas reais sem nenhum sucesso derrubam o código para ~0 de confiança.
+Uma validação de dois meses atrás quase não conta. É isso que evita o problema
+clássico do setor: lista enorme de cupom morto.
 
 ## Como rodar
 
-Requer Node 22.18+ (o projeto roda TypeScript direto, sem build e sem dependência
-em produção).
+Requer Node 22.18+ — o projeto roda TypeScript direto, **sem build e sem
+dependência em produção**.
 
 ```bash
-npm install     # só as dev deps (typescript)
-npm start       # http://localhost:3000
-npm test        # 36 testes
+npm install            # só dev deps (typescript, jsdom)
+npm start              # http://localhost:3000
+npm test               # 75 testes
+npm run typecheck
 node scripts/demo.ts   # demonstração offline, sem rede
 ```
 
-A instalação já vem com **dados de demonstração** (`data/coupons.seed.json`).
-Os códigos marcados como `demo` não são cupons reais — existem para exercitar o
-motor de regras. Para dados reais, configure um provider de afiliado:
+A extensão: `chrome://extensions` → Modo do desenvolvedor → **Carregar sem
+compactação** → pasta `extension/`. Detalhes e limites em
+[`extension/README.md`](extension/README.md).
+
+Docker:
 
 ```bash
-AWIN_API_TOKEN=... AWIN_PUBLISHER_ID=... npm start
+docker build -t cupom-search . && docker run -p 3000:3000 -v cupom-data:/data cupom-search
 ```
+
+## Configuração
+
+Tudo opcional — sem nada configurado o app sobe com dados de demonstração
+(`data/coupons.seed.json`). **Os códigos marcados como `demo` não são cupons
+reais**: existem para exercitar o motor de regras.
+
+```bash
+AWIN_API_TOKEN=...  AWIN_PUBLISHER_ID=...   # feed oficial de cupons
+AFFILIATE_PICHAU=awin:9999                  # link de saída com comissão
+AFFILIATE_AMAZON_BR=tag:seucodigo-20
+COUPON_DB_PATH=./data/db.json
+```
+
+Ver `.env.example`.
 
 ## API
 
 | Método | Rota | O que faz |
 | --- | --- | --- |
 | `POST` | `/api/search` | `{ "url": "..." }` → produto + cupons ranqueados |
-| `GET` | `/api/stores` | lojas suportadas |
+| `GET` | `/api/coupons?storeId=` | ranking da loja sem produto (usado no carrinho) |
+| `POST` | `/api/validations` | resultado do teste da extensão no checkout |
+| `POST` | `/api/feedback` | relato manual `{ storeId, code, worked }` |
 | `POST` | `/api/coupons` | envio de cupom pela comunidade |
-| `POST` | `/api/feedback` | `{ "couponId": "...", "worked": true }` |
-| `GET` | `/healthz` | healthcheck |
+| `GET` | `/go?url=&code=` | link de saída: registra o clique e redireciona |
+| `GET` | `/api/stores`, `/api/stats`, `/healthz` | catálogo, métricas, healthcheck |
 
 ## Arquitetura
 
 ```
-link → identifica a loja → lê a página → reúne cupons → cruza regras → ranqueia
-       stores.ts           product.ts    providers/     matching.ts
+              ┌── web/ ────────── cola o link, vê o ranking
+link ──▶ API ─┤
+              └── extension/ ──── testa no carrinho, devolve o desconto real
+                      │
+   stores.ts → fetcher.ts → product.ts → providers/ → matching.ts → db/
+   qual loja   HTTP seguro   preço e      afiliado,   regras e      evidência
+                             categoria    comunidade  confiança     acumulada
 ```
 
-- **`core/stores.ts`** — catálogo de lojas por domínio.
-- **`core/fetcher.ts`** — HTTP com timeout, limite de tamanho e bloqueio de
-  endereços internos (o usuário cola a URL, então SSRF é risco real).
-- **`core/product.ts`** — extrai nome/preço/categoria via JSON-LD → Open Graph →
-  heurística, nessa ordem de confiança.
-- **`core/providers/`** — fontes de cupom (afiliado, comunidade, seed de demo),
-  consultadas em paralelo e deduplicadas pela fonte mais confiável.
-- **`core/matching.ts`** — o coração: separa **bloqueio** (valor mínimo não
+- **`core/matching.ts`** — o coração. Separa **bloqueio** (valor mínimo não
   atingido, categoria errada, vencido) de **ressalva** (só no app, primeira
-  compra, preço não lido) e calcula a confiança com frescor da fonte
-  (decaimento exponencial), peso da fonte e limite inferior de Wilson sobre os
-  votos da comunidade — para 1 voto positivo não virar "100% garantido".
-- **`db/store.ts`** — persistência em JSON; trocar por Postgres é substituir esta
+  compra, preço não lido) e calcula a confiança combinando os três sinais acima.
+  Usa média a posteriori de uma Beta em vez de taxa bruta, para um único
+  "funcionou" não virar 100%.
+- **`core/fetcher.ts`** — timeout, limite de tamanho e bloqueio de endereços
+  internos: a URL vem do usuário, então SSRF é risco real.
+- **`core/providers/`** — afiliado (Awin), comunidade e seed de demo, em paralelo,
+  deduplicados pela fonte mais confiável.
+- **`core/cache.ts`** — TTL curto por loja e por página. O caminho mais rápido
+  para ser bloqueado é parecer um robô insistente.
+- **`extension/lib.js`** — heurística de detecção do campo de cupom, do botão e do
+  total. Seletor por loja é atalho; a heurística por rótulo/placeholder é a
+  garantia, porque loja muda layout toda semana.
+- **`db/store.ts`** — persistência em JSON. Trocar por Postgres é substituir esta
   classe.
 
-## Roadmap
+## Modelo de negócio
 
-1. **Extensão de navegador** — testa os códigos no checkout do próprio usuário.
-   É o diferencial real e o que transforma "confiança estimada" em "desconto
-   confirmado de R$ X".
-2. **Cadastro nas redes de afiliados** — receita e cupons oficiais no mesmo passo.
-3. **Cache + fila de revalidação** — não bater na loja a cada busca.
-4. **Alerta de preço** — retém usuário entre compras, que é o problema de todo
-   site de cupom.
+Vale dizer em voz alta: **cobrar assinatura por lista de cupom não costuma
+funcionar** — a informação é gratuita em cinco concorrentes. A receita do setor é
+**comissão de afiliado**: o usuário clica no seu link, compra, a loja paga. Por
+isso o `/go` existe desde o primeiro dia e registra cliques.
+
+Competir de frente com Méliuz/Cuponomia é caro. Um nicho como hardware/setup
+(Pichau, KaBuM!, Terabyte) tem ticket alto e público que pesquisa antes de
+comprar — e é onde a validação por extensão vale mais.
 
 ## Limitações conhecidas
 
-- Lojas com proteção anti-bot (Cloudflare) podem recusar a leitura da página; o
+- **Os seletores da extensão não foram conferidos contra as lojas reais.** Foram
+  escritos a partir dos padrões dessas plataformas; a heurística cobre o caso de
+  estarem errados, mas cada loja precisa de uma passada manual.
+- Lojas com proteção anti-bot podem recusar a leitura da página pelo servidor; o
   app degrada para "cupons gerais da loja" em vez de falhar.
-- A extração de categoria é heurística; cupons com regras muito específicas podem
-  ser classificados como incertos.
+- A categoria é heurística: cupom com regra muito específica pode cair como
+  incerto em vez de bloqueado.
+- O `Dockerfile` não foi construído aqui (sem daemon Docker no ambiente).
 - Sem provider de afiliado configurado, os únicos cupons são os de demonstração e
   os enviados pela comunidade.
+
+## Próximos passos
+
+1. Conferir os seletores loja a loja com o carrinho aberto.
+2. Cadastro nas redes de afiliados (receita + cupons oficiais no mesmo passo).
+3. Fila de revalidação: reaplicar cupons antigos periodicamente via extensão.
+4. Alerta de preço — retém usuário entre compras, que é o problema de todo site
+   de cupom.

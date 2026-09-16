@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Cupom Search",
+  "version": "0.1.0",
+  "description": "Testa cupons no carrinho da loja e mostra qual realmente d\u00e1 desconto.",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://*.pichau.com.br/*",
+    "https://*.kabum.com.br/*",
+    "https://*.terabyteshop.com.br/*",
+    "https://*.madeiramadeira.com.br/*",
+    "https://*.magazineluiza.com.br/*",
+    "https://*.mobly.com.br/*",
+    "http://localhost:3000/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Cupom Search"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.pichau.com.br/*",
+        "https://*.kabum.com.br/*",
+        "https://*.terabyteshop.com.br/*",
+        "https://*.madeiramadeira.com.br/*",
+        "https://*.magazineluiza.com.br/*",
+        "https://*.mobly.com.br/*"
+      ],
+      "js": [
+        "config.js",
+        "lib.js",
+        "stores.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

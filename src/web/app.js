@@ -35,7 +35,10 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-function render({ product, matches, warnings }) {
+let currentUrl = '';
+
+function render({ product, matches, warnings, outboundUrl }) {
+  currentUrl = product.url;
   const usable = matches.filter((m) => m.applicable).length;
   statusEl.textContent = matches.length
     ? `${matches.length} cupom(ns) conhecido(s) para esta loja — ${usable} com chance de valer neste produto.`
@@ -53,6 +56,9 @@ function render({ product, matches, warnings }) {
         .filter(Boolean)
         .join(' — '),
     ),
+    outboundUrl
+      ? el('a', { class: 'outbound', href: `/go?url=${encodeURIComponent(product.url)}`, target: '_blank', rel: 'noopener' }, 'Abrir na loja →')
+      : null,
   );
 
   for (const warning of warnings) {
@@ -63,15 +69,21 @@ function render({ product, matches, warnings }) {
 }
 
 function couponCard(match) {
-  const { coupon, confidence, estimatedSavings, finalPrice, reasons, blockers, applicable } = match;
+  const { coupon, confidence, estimatedSavings, observedDiscount, finalPrice, reasons, blockers, applicable, evidence } = match;
   const pct = Math.round(confidence * 100);
   const level = pct >= 66 ? '' : pct >= 33 ? 'mid' : 'low';
+  const validated = evidence.checkout.success > 0;
 
   const head = el('div', { class: 'coupon-head' },
     el('code', { class: 'code' }, coupon.code),
     coupon.demo ? el('span', { class: 'badge demo' }, 'demo') : null,
-    estimatedSavings ? el('span', { class: 'badge savings' }, `-${brl.format(estimatedSavings)}`) : null,
-    finalPrice !== null ? el('span', { class: 'badge' }, `fica ${brl.format(finalPrice)}`) : null,
+    validated ? el('span', { class: 'badge verified' }, 'testado no checkout') : null,
+    observedDiscount
+      ? el('span', { class: 'badge savings' }, `-${brl.format(observedDiscount)} confirmado`)
+      : estimatedSavings
+        ? el('span', { class: 'badge savings' }, `-${brl.format(estimatedSavings)} estimado`)
+        : null,
+    finalPrice !== null && !observedDiscount ? el('span', { class: 'badge' }, `fica ${brl.format(finalPrice)}`) : null,
     !applicable ? el('span', { class: 'badge' }, 'provavelmente não vale') : null,
   );
 
@@ -97,18 +109,27 @@ function couponCard(match) {
       await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ couponId: coupon.id, worked: value }),
+        body: JSON.stringify({ storeId: coupon.storeId, code: coupon.code, worked: value }),
       }).catch(() => {});
       button.textContent = 'Obrigado!';
     });
   }
+
+  const go = currentUrl
+    ? el('a', {
+        class: 'go',
+        href: `/go?url=${encodeURIComponent(currentUrl)}&code=${encodeURIComponent(coupon.code)}`,
+        target: '_blank',
+        rel: 'noopener',
+      }, 'Usar na loja')
+    : null;
 
   return el('article', { class: `card coupon${applicable ? '' : ' blocked'}` },
     head,
     el('p', { class: 'product-meta' }, coupon.description),
     el('div', { class: 'confidence' }, el('span', {}, `confiança ${pct}%`), bar),
     list,
-    el('div', { class: 'actions' }, copy, worked, failed),
+    el('div', { class: 'actions' }, copy, worked, failed, go),
   );
 }
 

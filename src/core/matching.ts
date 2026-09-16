@@ -1,8 +1,9 @@
-import type { Coupon, CouponMatch, FeedbackStats, Product } from './types.ts';
+import type { Coupon, CouponMatch, Evidence, Product } from './types.ts';
+import { emptyEvidence, evidenceKey } from './types.ts';
 
 const DAY_MS = 86_400_000;
 
-export const EMPTY_FEEDBACK: FeedbackStats = { worked: 0, failed: 0, lastWorkedAt: null };
+
 
 /** Formata em Real, para as mensagens saírem legíveis em pt-BR. */
 function brl(value: number): string {
@@ -31,18 +32,12 @@ export function estimateSavings(coupon: Coupon, price: number | null): number | 
 }
 
 /**
- * Limite inferior do intervalo de Wilson (95%) para a taxa de sucesso relatada.
- * Penaliza cupons com poucos votos em vez de tratá-los como 100%.
+ * Média a posteriori de uma Beta com prior neutro: um único "funcionou" não
+ * vira 100%, e a taxa só se aproxima do extremo com amostra de verdade.
+ * (2 observações imaginárias empatadas em 50%.)
  */
-export function wilsonLowerBound(worked: number, failed: number): number {
-  const total = worked + failed;
-  if (total === 0) return 0.5;
-  const z = 1.96;
-  const phat = worked / total;
-  const denominator = 1 + (z * z) / total;
-  const centre = phat + (z * z) / (2 * total);
-  const margin = z * Math.sqrt((phat * (1 - phat) + (z * z) / (4 * total)) / total);
-  return Math.max(0, (centre - margin) / denominator);
+export function evidenceScore(success: number, failure: number, priorWeight = 2): number {
+  return (success + 0.5 * priorWeight) / (success + failure + priorWeight);
 }
 
 /** Decai de 1 para ~0 conforme o cupom envelhece sem nova confirmação. */
@@ -57,7 +52,16 @@ export interface MatchOptions {
   now?: Date;
   /** Peso de confiança da fonte (0..1). */
   sourceTrust?: number;
-  feedback?: FeedbackStats;
+  evidence?: Evidence;
+}
+
+/** Mediana dos descontos observados no checkout. */
+export function medianDiscount(samples: number[]): number | null {
+  if (samples.length === 0) return null;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const value = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  return Math.round(value * 100) / 100;
 }
 
 /**
@@ -67,7 +71,7 @@ export interface MatchOptions {
  */
 export function matchCoupon(coupon: Coupon, product: Product, options: MatchOptions = {}): CouponMatch {
   const now = options.now ?? new Date();
-  const feedback = options.feedback ?? EMPTY_FEEDBACK;
+  const evidence = options.evidence ?? emptyEvidence(evidenceKey(coupon.storeId, coupon.code));
   const sourceTrust = options.sourceTrust ?? 0.5;
   const reasons: string[] = [];
   const blockers: string[] = [];
@@ -130,20 +134,49 @@ export function matchCoupon(coupon: Coupon, product: Product, options: MatchOpti
 
   const applicable = !hardBlock;
 
+  // 1. Ponto de partida: quão fresca e quão confiável é a fonte do cupom.
   const freshness = freshnessScore(coupon.lastSeenAt, now);
-  const community = wilsonLowerBound(feedback.worked, feedback.failed);
-  const votes = feedback.worked + feedback.failed;
-  const communityWeight = Math.min(0.45, votes * 0.05);
-  const base =
-    (0.40 * freshness + 0.30 * sourceTrust + 0.30 * 0.5) * (1 - communityWeight) +
-    community * communityWeight;
+  let score = 0.40 * freshness + 0.30 * sourceTrust + 0.30 * 0.5;
 
-  let confidence = (applicable ? base : base * 0.15) * softPenalty;
+  // 2. Relatos manuais do site: sinal fraco, peso limitado.
+  const reportVotes = evidence.reports.worked + evidence.reports.failed;
+  if (reportVotes > 0) {
+    const reportWeight = Math.min(0.35, reportVotes * 0.05);
+    score = score * (1 - reportWeight) + evidenceScore(evidence.reports.worked, evidence.reports.failed) * reportWeight;
+    if (reportVotes >= 3) {
+      reasons.push(`${evidence.reports.worked} de ${reportVotes} pessoas relataram que funcionou.`);
+    }
+  }
+
+  // 3. Teste real no checkout (extensão): domina os demais sinais, mas decai
+  //    com o tempo — cupom testado há dois meses não diz muito sobre hoje.
+  const attempts = evidence.checkout.success + evidence.checkout.failure;
+  if (attempts > 0) {
+    const recency = evidence.lastAttemptAt ? freshnessScore(evidence.lastAttemptAt, now) : 0.2;
+    const checkoutWeight = Math.min(0.85, 0.35 + attempts * 0.12) * recency;
+    score = score * (1 - checkoutWeight) + evidenceScore(evidence.checkout.success, evidence.checkout.failure) * checkoutWeight;
+    const when = evidence.lastSuccessAt ?? evidence.lastAttemptAt;
+    if (evidence.checkout.success > 0 && when) {
+      const daysAgo = Math.max(0, Math.round((now.getTime() - new Date(when).getTime()) / DAY_MS));
+      reasons.push(
+        `Aplicado com sucesso no checkout ${evidence.checkout.success}x (último há ${daysAgo === 0 ? 'menos de um dia' : `${daysAgo} dia${daysAgo === 1 ? '' : 's'}`}).`,
+      );
+    } else {
+      blockers.push(`Testado no checkout ${attempts}x e falhou todas as vezes.`);
+    }
+  }
+
+  let confidence = (applicable ? score : score * 0.15) * softPenalty;
+  // Três tentativas reais no carrinho sem nenhum sucesso: o código não vale.
+  if (evidence.checkout.failure >= 3 && evidence.checkout.success === 0) {
+    confidence = Math.min(confidence, 0.08);
+  }
   if (expired) confidence = 0;
   confidence = Math.max(0, Math.min(1, Math.round(confidence * 100) / 100));
 
-  if (votes >= 3) {
-    reasons.push(`${feedback.worked} de ${votes} pessoas relataram que funcionou.`);
+  const observedDiscount = medianDiscount(evidence.discountSamples);
+  if (observedDiscount !== null) {
+    reasons.push(`Desconto observado no carrinho: ${brl(observedDiscount)}.`);
   }
   if (freshness > 0.7) reasons.push('Confirmado pela fonte nos últimos dias.');
   else if (freshness < 0.25) blockers.push('A fonte não confirma esse cupom há semanas.');
@@ -153,7 +186,17 @@ export function matchCoupon(coupon: Coupon, product: Product, options: MatchOpti
   const finalPrice =
     estimatedSavings !== null && price !== null ? Math.round((price - estimatedSavings) * 100) / 100 : null;
 
-  return { coupon, applicable, confidence, estimatedSavings, finalPrice, reasons, blockers, feedback };
+  return {
+    coupon,
+    applicable,
+    confidence,
+    estimatedSavings,
+    finalPrice,
+    reasons,
+    blockers,
+    observedDiscount,
+    evidence,
+  };
 }
 
 /** Ordena por aplicabilidade, depois economia estimada, depois confiança. */

@@ -1,14 +1,16 @@
 import { createServer } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { searchByUrl } from '../core/search.ts';
+import { searchByUrl, couponsForStore, rankForProduct } from '../core/search.ts';
 import { FetchError } from '../core/fetcher.ts';
-import { STORES } from '../core/stores.ts';
+import { STORES, findStoreById, findStoreByUrl } from '../core/stores.ts';
+import { buildOutboundUrl } from '../core/affiliateLinks.ts';
 import { db } from '../db/store.ts';
 import { rateLimit } from './rateLimit.ts';
-import type { Coupon } from '../core/types.ts';
+import type { Coupon, Product, Validation } from '../core/types.ts';
 
 const WEB_DIR = fileURLToPath(new URL('../web/', import.meta.url));
 const PORT = Number(process.env.PORT ?? 3000);
@@ -17,15 +19,15 @@ const MIME: Record<string, string> = {
   '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.png': 'image/png',
 };
 
-function json(res: import('node:http').ServerResponse, status: number, body: unknown): void {
-  const payload = JSON.stringify(body);
+function json(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
-  res.end(payload);
+  res.end(JSON.stringify(body));
 }
 
-async function readJsonBody(req: import('node:http').IncomingMessage): Promise<Record<string, unknown>> {
+async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
@@ -41,16 +43,16 @@ async function readJsonBody(req: import('node:http').IncomingMessage): Promise<R
   }
 }
 
-function clientIp(req: import('node:http').IncomingMessage): string {
+function clientIp(req: IncomingMessage): string {
   const forwarded = req.headers['x-forwarded-for'];
   if (typeof forwarded === 'string') return forwarded.split(',')[0].trim();
   return req.socket.remoteAddress ?? 'unknown';
 }
 
-async function serveStatic(pathname: string, res: import('node:http').ServerResponse): Promise<void> {
+async function serveStatic(pathname: string, res: ServerResponse): Promise<void> {
   const file = pathname === '/' ? 'index.html' : pathname.slice(1);
   if (file.includes('..') || file.includes('/')) {
-    res.writeHead(404).end('Not found');
+    res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' }).end('Not found');
     return;
   }
   try {
@@ -62,14 +64,61 @@ async function serveStatic(pathname: string, res: import('node:http').ServerResp
   }
 }
 
+/** Produto "vazio": usado quando só sabemos a loja (caso do carrinho). */
+function bareProduct(storeId: string, storeName: string): Product {
+  return {
+    url: '',
+    storeId,
+    storeName,
+    title: null,
+    price: null,
+    currency: 'BRL',
+    categories: [],
+    sku: null,
+    source: 'none',
+  };
+}
+
 export const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
   const method = req.method ?? 'GET';
 
+  // A extensão roda dentro da página da loja, então precisa de CORS na API.
+  if (url.pathname.startsWith('/api/')) {
+    res.setHeader('access-control-allow-origin', '*');
+    res.setHeader('access-control-allow-headers', 'content-type');
+    res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS');
+    if (method === 'OPTIONS') {
+      res.writeHead(204).end();
+      return;
+    }
+  }
+
   try {
     if (method === 'GET' && url.pathname === '/healthz') return json(res, 200, { ok: true });
+
+    if (method === 'GET' && url.pathname === '/api/stats') {
+      return json(res, 200, await db.stats());
+    }
+
     if (method === 'GET' && url.pathname === '/api/stores') {
-      return json(res, 200, { stores: STORES.map(({ id, name, domains }) => ({ id, name, domains })) });
+      return json(res, 200, {
+        stores: STORES.map(({ id, name, domains, checkoutCouponField }) => ({
+          id,
+          name,
+          domains,
+          checkoutCouponField: checkoutCouponField ?? null,
+        })),
+      });
+    }
+
+    // Usado pela extensão no carrinho: lá não há URL de produto, só a loja.
+    if (method === 'GET' && url.pathname === '/api/coupons') {
+      const storeId = url.searchParams.get('storeId') ?? '';
+      const store = findStoreById(storeId) ?? findStoreByUrl(url.searchParams.get('url') ?? '');
+      if (!store) return json(res, 404, { error: 'Loja não catalogada.' });
+      const matches = await rankForProduct(await couponsForStore(store), bareProduct(store.id, store.name));
+      return json(res, 200, { store: { id: store.id, name: store.name }, matches });
     }
 
     if (method === 'POST' && url.pathname === '/api/search') {
@@ -81,27 +130,44 @@ export const server = createServer(async (req, res) => {
       const body = await readJsonBody(req);
       const target = typeof body.url === 'string' ? body.url.trim() : '';
       if (!target) return json(res, 400, { error: 'Envie o campo "url" com o link do produto.' });
-      const result = await searchByUrl(target);
-      return json(res, 200, result);
+      return json(res, 200, await searchByUrl(target));
     }
 
+    // Relato manual vindo do site.
     if (method === 'POST' && url.pathname === '/api/feedback') {
       const body = await readJsonBody(req);
-      const couponId = typeof body.couponId === 'string' ? body.couponId : '';
-      if (!couponId || typeof body.worked !== 'boolean') {
-        return json(res, 400, { error: 'Envie "couponId" e "worked" (true/false).' });
-      }
-      const stats = await db.recordFeedback(couponId, body.worked);
-      return json(res, 200, { couponId, feedback: stats });
+      const { storeId, code } = requireStoreAndCode(body);
+      if (typeof body.worked !== 'boolean') return json(res, 400, { error: 'Envie "worked" (true/false).' });
+      return json(res, 200, { evidence: await db.recordReport(storeId, code, body.worked) });
+    }
+
+    // Teste real feito pela extensão dentro do checkout.
+    if (method === 'POST' && url.pathname === '/api/validations') {
+      const limit = rateLimit(`validate:${clientIp(req)}`, 120);
+      if (!limit.ok) return json(res, 429, { error: 'Muitos envios seguidos.' });
+      const body = await readJsonBody(req);
+      const validation = parseValidation(body);
+      return json(res, 201, { evidence: await db.recordValidation(validation) });
     }
 
     if (method === 'POST' && url.pathname === '/api/coupons') {
       const limit = rateLimit(`submit:${clientIp(req)}`, 10);
       if (!limit.ok) return json(res, 429, { error: 'Muitos envios seguidos.' });
       const body = await readJsonBody(req);
-      const coupon = parseSubmission(body);
-      const saved = await db.upsertCoupon(coupon);
-      return json(res, 201, { coupon: saved });
+      return json(res, 201, { coupon: await db.upsertCoupon(parseSubmission(body)) });
+    }
+
+    // Link de saída: registra o clique e manda para a loja (com afiliado).
+    if (method === 'GET' && url.pathname === '/go') {
+      const target = url.searchParams.get('url') ?? '';
+      const code = url.searchParams.get('code') ?? '';
+      const store = findStoreByUrl(target);
+      const outbound = buildOutboundUrl(target, code || undefined);
+      // Só redireciona para loja catalogada — evita virar open redirect.
+      if (!store || !outbound) return json(res, 400, { error: 'Link de saída inválido.' });
+      await db.recordClick(store.id, code).catch(() => {});
+      res.writeHead(302, { location: outbound, 'cache-control': 'no-store' }).end();
+      return;
     }
 
     if (method === 'GET') return await serveStatic(url.pathname, res);
@@ -113,12 +179,38 @@ export const server = createServer(async (req, res) => {
   }
 });
 
-function parseSubmission(body: Record<string, unknown>): Coupon {
+function requireStoreAndCode(body: Record<string, unknown>): { storeId: string; code: string } {
   const storeId = typeof body.storeId === 'string' ? body.storeId : '';
   const code = typeof body.code === 'string' ? body.code.trim().toUpperCase() : '';
-  const type = body.type === 'percent' || body.type === 'fixed' || body.type === 'shipping' ? body.type : null;
-  if (!storeId || !STORES.some((store) => store.id === storeId)) throw new FetchError('storeId desconhecido.');
+  if (!findStoreById(storeId)) throw new FetchError('storeId desconhecido.');
   if (!code || code.length > 40) throw new FetchError('Código do cupom inválido.');
+  return { storeId, code };
+}
+
+function parseValidation(body: Record<string, unknown>): Validation {
+  const { storeId, code } = requireStoreAndCode(body);
+  if (typeof body.worked !== 'boolean') throw new FetchError('Envie "worked" (true/false).');
+  const discount = toPositiveNumber(body.discount);
+  const cartTotal = toPositiveNumber(body.cartTotal);
+  return {
+    storeId,
+    code,
+    worked: body.worked,
+    discount,
+    cartTotal,
+    at: new Date().toISOString(),
+    method: body.method === 'manual' ? 'manual' : 'extension',
+  };
+}
+
+function toPositiveNumber(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
+  return Number.isFinite(parsed) && parsed >= 0 && parsed < 1_000_000 ? parsed : null;
+}
+
+function parseSubmission(body: Record<string, unknown>): Coupon {
+  const { storeId, code } = requireStoreAndCode(body);
+  const type = body.type === 'percent' || body.type === 'fixed' || body.type === 'shipping' ? body.type : null;
   if (!type) throw new FetchError('type deve ser percent, fixed ou shipping.');
   const value = Number(body.value ?? 0);
   if (!Number.isFinite(value) || value < 0 || value > 100_000) throw new FetchError('value inválido.');
@@ -127,7 +219,8 @@ function parseSubmission(body: Record<string, unknown>): Coupon {
     id: randomUUID(),
     storeId,
     code,
-    description: typeof body.description === 'string' ? body.description.slice(0, 200) : 'Cupom enviado pela comunidade',
+    description:
+      typeof body.description === 'string' ? body.description.slice(0, 200) : 'Cupom enviado pela comunidade',
     type,
     value,
     rules: (body.rules && typeof body.rules === 'object' ? body.rules : {}) as Coupon['rules'],

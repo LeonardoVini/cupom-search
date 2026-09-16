@@ -63,10 +63,48 @@ export interface Coupon {
   demo?: boolean;
 }
 
-export interface FeedbackStats {
-  worked: number;
-  failed: number;
-  lastWorkedAt: string | null;
+/**
+ * Tudo que sabemos sobre um código a partir do mundo real, agregado por
+ * `storeId:CODIGO` (e não pelo id do cupom, que muda conforme a fonte).
+ *
+ * `reports` são relatos manuais no site; `checkout` são testes feitos pela
+ * extensão dentro do carrinho real do usuário — evidência bem mais forte.
+ */
+export interface Evidence {
+  key: string;
+  reports: { worked: number; failed: number };
+  checkout: { success: number; failure: number };
+  lastSuccessAt: string | null;
+  lastAttemptAt: string | null;
+  /** Descontos em BRL observados no checkout (amostra recente). */
+  discountSamples: number[];
+}
+
+export function evidenceKey(storeId: string, code: string): string {
+  return `${storeId}:${code.trim().toUpperCase()}`;
+}
+
+export function emptyEvidence(key: string): Evidence {
+  return {
+    key,
+    reports: { worked: 0, failed: 0 },
+    checkout: { success: 0, failure: 0 },
+    lastSuccessAt: null,
+    lastAttemptAt: null,
+    discountSamples: [],
+  };
+}
+
+/** Registro bruto de um teste de cupom no checkout. */
+export interface Validation {
+  storeId: string;
+  code: string;
+  worked: boolean;
+  /** Desconto em BRL lido do carrinho, quando a loja informou. */
+  discount: number | null;
+  cartTotal: number | null;
+  at: string;
+  method: 'extension' | 'manual';
 }
 
 export interface CouponMatch {
@@ -81,7 +119,9 @@ export interface CouponMatch {
   reasons: string[];
   /** Motivos que impedem ou colocam o cupom em dúvida. */
   blockers: string[];
-  feedback: FeedbackStats;
+  /** Desconto mediano realmente observado no checkout, quando houver. */
+  observedDiscount: number | null;
+  evidence: Evidence;
 }
 
 export interface CouponProvider {

@@ -69,7 +69,7 @@ test('POST /api/search bloqueia endereço interno (SSRF)', async () => {
   assert.ok(res.status === 403 || res.status === 422);
 });
 
-test('POST /api/coupons valida e grava; feedback é contabilizado', async () => {
+test('POST /api/coupons valida e grava o envio da comunidade', async () => {
   const bad = await post('/api/coupons', { storeId: 'inexistente', code: 'X', type: 'percent', value: 10 });
   assert.equal(bad.status, 400);
 
@@ -84,14 +84,100 @@ test('POST /api/coupons valida e grava; feedback é contabilizado', async () => 
   assert.equal(created.status, 201);
   const { coupon } = (await created.json()) as { coupon: { id: string; code: string } };
   assert.equal(coupon.code, 'MEUCUPOM');
+});
 
-  const feedback = await post('/api/feedback', { couponId: coupon.id, worked: true });
-  assert.equal(feedback.status, 200);
-  const stats = (await feedback.json()) as { feedback: { worked: number } };
-  assert.equal(stats.feedback.worked, 1);
+test('relato manual é contabilizado por loja + código', async () => {
+  const res = await post('/api/feedback', { storeId: 'pichau', code: 'RELATO1', worked: true });
+  assert.equal(res.status, 200);
+  const { evidence } = (await res.json()) as { evidence: { reports: { worked: number } } };
+  assert.equal(evidence.reports.worked, 1);
 
-  const invalid = await post('/api/feedback', { couponId: coupon.id });
-  assert.equal(invalid.status, 400);
+  const semWorked = await post('/api/feedback', { storeId: 'pichau', code: 'RELATO1' });
+  assert.equal(semWorked.status, 400);
+  const semLoja = await post('/api/feedback', { storeId: 'nao-existe', code: 'RELATO1', worked: true });
+  assert.equal(semLoja.status, 400);
+});
+
+test('validação da extensão registra sucesso e desconto observado', async () => {
+  const res = await post('/api/validations', {
+    storeId: 'pichau',
+    code: 'testado10',
+    worked: true,
+    discount: 129.99,
+    cartTotal: 1169.91,
+    method: 'extension',
+  });
+  assert.equal(res.status, 201);
+  const { evidence } = (await res.json()) as {
+    evidence: { key: string; checkout: { success: number }; discountSamples: number[] };
+  };
+  assert.equal(evidence.key, 'pichau:TESTADO10');
+  assert.equal(evidence.checkout.success, 1);
+  assert.deepEqual(evidence.discountSamples, [129.99]);
+});
+
+test('validação com falha não registra desconto', async () => {
+  const res = await post('/api/validations', { storeId: 'pichau', code: 'NAOFUNCIONA', worked: false, discount: 0 });
+  const { evidence } = (await res.json()) as {
+    evidence: { checkout: { failure: number }; discountSamples: number[] };
+  };
+  assert.equal(evidence.checkout.failure, 1);
+  assert.deepEqual(evidence.discountSamples, []);
+});
+
+test('validação valida o corpo', async () => {
+  assert.equal((await post('/api/validations', { storeId: 'pichau', code: 'X' })).status, 400);
+  assert.equal((await post('/api/validations', { storeId: 'x', code: 'X', worked: true })).status, 400);
+});
+
+test('GET /api/coupons devolve o ranking da loja sem precisar de produto', async () => {
+  const res = await fetch(`${base}/api/coupons?storeId=pichau`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { store: { id: string }; matches: { coupon: { code: string } }[] };
+  assert.equal(body.store.id, 'pichau');
+  assert.ok(body.matches.length > 0);
+
+  assert.equal((await fetch(`${base}/api/coupons?storeId=nada`)).status, 404);
+});
+
+test('a evidência da extensão aparece no ranking da loja', async () => {
+  await post('/api/validations', { storeId: 'kabum', code: 'DEMO-KB7', worked: true, discount: 40 });
+  await post('/api/validations', { storeId: 'kabum', code: 'DEMO-KB7', worked: true, discount: 42 });
+  const res = await fetch(`${base}/api/coupons?storeId=kabum`);
+  const { matches } = (await res.json()) as {
+    matches: { coupon: { code: string }; observedDiscount: number | null; reasons: string[] }[];
+  };
+  const match = matches.find((candidate) => candidate.coupon.code === 'DEMO-KB7');
+  assert.ok(match);
+  assert.equal(match.observedDiscount, 41);
+  assert.match(match.reasons.join(' '), /Aplicado com sucesso no checkout/);
+});
+
+test('API responde ao preflight de CORS (a extensão depende disso)', async () => {
+  const res = await fetch(`${base}/api/stores`, { method: 'OPTIONS' });
+  assert.equal(res.status, 204);
+  assert.equal(res.headers.get('access-control-allow-origin'), '*');
+});
+
+test('/go redireciona para a loja e recusa domínio de fora', async () => {
+  const res = await fetch(`${base}/go?url=${encodeURIComponent('https://www.pichau.com.br/mesa')}&code=ABC`, {
+    redirect: 'manual',
+  });
+  assert.equal(res.status, 302);
+  const location = res.headers.get('location') ?? '';
+  assert.match(location, /pichau\.com\.br/);
+  assert.match(location, /utm_campaign=ABC/);
+
+  const foreign = await fetch(`${base}/go?url=${encodeURIComponent('https://evil.example.com/')}`, {
+    redirect: 'manual',
+  });
+  assert.equal(foreign.status, 400);
+});
+
+test('GET /api/stats resume o que o sistema já aprendeu', async () => {
+  const stats = (await (await fetch(`${base}/api/stats`)).json()) as { validations: number; clicks: number };
+  assert.ok(stats.validations >= 1);
+  assert.ok(stats.clicks >= 1);
 });
 
 test('método não suportado responde 405', async () => {
