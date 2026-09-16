@@ -1,5 +1,6 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
+import { isOfflineDemo, offlineFixture } from './fixtures.ts';
 
 const USER_AGENT =
   'CupomSearchBot/0.1 (+https://github.com/LeonardoVini/cupom-search) Mozilla/5.0 (compatible)';
@@ -56,6 +57,11 @@ export async function assertPublicUrl(rawUrl: string): Promise<URL> {
 
 /** GET com timeout, limite de tamanho e user-agent identificável. */
 export async function fetchHtml(rawUrl: string): Promise<string> {
+  if (isOfflineDemo()) {
+    const fixture = offlineFixture(rawUrl);
+    if (fixture) return fixture;
+    throw new FetchError('Modo demonstração: não tenho uma página salva para essa loja.', 502);
+  }
   const url = await assertPublicUrl(rawUrl);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);

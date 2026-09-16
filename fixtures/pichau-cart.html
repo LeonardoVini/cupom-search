@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Carrinho (simulação) — Cupom Search</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; background: #f6f7f9; color: #15181d; margin: 0; padding: 32px; }
+      .wrap { max-width: 640px; margin: 0 auto; }
+      .sim { background: #fff6e0; border: 1px solid #f0d089; border-radius: 8px; padding: 10px 14px; font-size: 13px; color: #6b5316; }
+      .box { background: #fff; border: 1px solid #dde1e7; border-radius: 12px; padding: 20px; margin-top: 16px; }
+      .row { display: flex; justify-content: space-between; padding: 6px 0; }
+      .row.total { border-top: 1px solid #dde1e7; margin-top: 10px; padding-top: 12px; font-size: 20px; font-weight: 700; }
+      #coupon-box { display: none; margin-top: 12px; gap: 8px; }
+      #coupon-box.open { display: flex; }
+      input { flex: 1; padding: 10px; border: 1px solid #dde1e7; border-radius: 8px; font-size: 15px; }
+      button { padding: 10px 16px; border: 0; border-radius: 8px; background: #15181d; color: #fff; cursor: pointer; }
+      #toggle { background: none; color: #15181d; border: 1px dashed #dde1e7; width: 100%; margin-top: 12px; }
+      #msg { font-size: 13px; margin-top: 8px; min-height: 18px; }
+      #msg.ok { color: #15803d; } #msg.err { color: #b91c1c; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <p class="sim">
+        <strong>Página simulada.</strong> Não é a Pichau: é um carrinho de mentira usado para
+        demonstrar e testar a extensão sem incomodar a loja real.
+      </p>
+
+      <div class="box">
+        <h1 style="font-size:18px;margin:0 0 12px">Seu carrinho</h1>
+        <div class="row"><span>Mesa Gamer Pichau Kaiju 140cm Preta</span><span>R$ 1.299,90</span></div>
+        <div class="row"><span>Frete</span><span>R$ 0,00</span></div>
+        <div class="row"><span>Desconto</span><span id="discount">R$ 0,00</span></div>
+        <div class="row total"><span>Total do pedido</span><span data-testid="cart-total">R$ 1.299,90</span></div>
+
+        <button id="toggle" type="button">Tenho um cupom</button>
+        <div id="coupon-box">
+          <input name="coupon_code" placeholder="Código do cupom" />
+          <button type="button" value="Aplicar">Aplicar</button>
+        </div>
+        <p id="msg"></p>
+      </div>
+    </div>
+
+    <script>
+      // "Loja" de mentira: só estes dois códigos dão desconto.
+      const SUBTOTAL = 1299.9;
+      const REGRAS = { 'DEMO-PERIFERICOS10': 0.1, 'DEMO-PIX5': 0.05 };
+      const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+      document.getElementById('toggle').addEventListener('click', () => {
+        document.getElementById('coupon-box').classList.add('open');
+      });
+
+      document.querySelector('#coupon-box button').addEventListener('click', () => {
+        const code = document.querySelector('input[name="coupon_code"]').value.trim().toUpperCase();
+        const msg = document.getElementById('msg');
+        const rate = REGRAS[code];
+        const desconto = rate ? Math.round(SUBTOTAL * rate * 100) / 100 : 0;
+        document.getElementById('discount').textContent = `- ${brl(desconto)}`;
+        document.querySelector('[data-testid="cart-total"]').textContent = brl(SUBTOTAL - desconto);
+        msg.className = rate ? 'ok' : 'err';
+        msg.textContent = rate ? `Cupom ${code} aplicado.` : `Cupom ${code} inválido ou expirado.`;
+      });
+    </script>
+  </body>
+</html>

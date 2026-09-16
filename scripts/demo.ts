@@ -15,7 +15,7 @@ import { emptyEvidence, evidenceKey } from '../src/core/types.ts';
 const URL_DEMO = 'https://www.pichau.com.br/mesa-gamer-pichau-kaiju-140cm-preta';
 const brl = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const html = await readFile(fileURLToPath(new URL('../tests/fixtures/pichau-mesa.html', import.meta.url)), 'utf8');
+const html = await readFile(fileURLToPath(new URL('../fixtures/pichau-mesa.html', import.meta.url)), 'utf8');
 const product = extractProduct(URL_DEMO, html);
 const store = findStoreByUrl(URL_DEMO);
 if (!store) throw new Error('loja não catalogada');

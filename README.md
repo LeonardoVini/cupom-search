@@ -5,20 +5,25 @@ real de funcionar — filtrados pelas regras que se aplicam **àquele** produto,
 ordenados por economia e confiança. A extensão de navegador fecha o ciclo:
 testa os códigos no seu carrinho e transforma estimativa em desconto confirmado.
 
-```
-Mesa Gamer Pichau Kaiju 140cm · R$ 1.299,90
+![Resultado da busca](docs/screenshots/05-apos-validacao.png)
 
-✅ DEMO-PERIFERICOS10   64%  -R$ 129,99  → R$ 1.169,91
-   + Produto atinge o mínimo de R$ 300,00.
-   + Categoria compatível (moveis, escritorio, informatica).
-❌ DEMO-HARDWARE15       9%
-   - Restrito a placa de video e o produto não parece se encaixar.
+Cada cupom vem com o motivo da nota: o que se aplica ao produto, o que bloqueia,
+e — quando a extensão já testou — o desconto que realmente apareceu no carrinho.
 
---- depois que a extensão testou no carrinho ---
-sem teste:  64% de confiança, economia estimada
-com teste:  79% de confiança, desconto observado R$ 129,99
-            "Aplicado com sucesso no checkout 4x (último há 1 dia)."
+## Vendo funcionar
+
+```bash
+npm run demo        # sobe em modo offline, com uma página de produto salva
+npm run screenshots # abre num Chromium de verdade e salva docs/screenshots/
 ```
+
+| A extensão no carrinho | Depois de testar |
+| --- | --- |
+| ![Painel no carrinho](docs/screenshots/03-extensao-carrinho.png) | ![Resultado do teste](docs/screenshots/04-extensao-resultado.png) |
+
+O carrinho das imagens é `fixtures/pichau-cart.html`, uma **página simulada** —
+demonstra e testa a extensão sem incomodar a loja real. Os códigos `DEMO-*` não
+são cupons de verdade.
 
 ## O problema real (e como o sistema resolve)
 

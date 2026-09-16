@@ -11,12 +11,15 @@
     "start": "node src/api/server.ts",
     "dev": "node --watch src/api/server.ts",
     "test": "node --test 'tests/*.test.ts'",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "screenshots": "node scripts/screenshots.ts",
+    "demo": "DEMO_OFFLINE=1 node src/api/server.ts"
   },
   "devDependencies": {
     "@types/jsdom": "^30.0.0",
     "@types/node": "^22.10.0",
     "jsdom": "^30.0.1",
+    "playwright": "^1.63.0",
     "typescript": "^5.7.0"
   }
 }

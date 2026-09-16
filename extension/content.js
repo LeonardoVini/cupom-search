@@ -40,18 +40,25 @@
     return readCartTotal();
   }
 
-  async function api(path, options) {
-    const base = await globalThis.CupomSearchConfig.getApiBase();
-    const res = await fetch(`${base}${path}`, options);
-    if (!res.ok) throw new Error(`API respondeu ${res.status}`);
-    return res.json();
+  /**
+   * Toda ida à API passa pelo service worker (ver background.js): content
+   * script no MV3 esbarra no CORS da própria loja.
+   */
+  function ask(message) {
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(message, (response) => {
+        const failure = chrome.runtime.lastError;
+        if (failure) return reject(new Error(failure.message));
+        if (!response?.ok) return reject(new Error(response?.error ?? 'falha na API'));
+        resolve(response.data);
+      });
+    });
   }
 
   function report(code, worked, discount, cartTotal) {
-    return api('/api/validations', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ storeId: store.id, code, worked, discount, cartTotal, method: 'extension' }),
+    return ask({
+      type: 'validation',
+      payload: { storeId: store.id, code, worked, discount, cartTotal, method: 'extension' },
     }).catch(() => {});
   }
 
@@ -76,7 +83,7 @@
 
   let codes = [];
 
-  api(`/api/coupons?storeId=${encodeURIComponent(store.id)}`)
+  ask({ type: 'coupons', storeId: store.id })
     .then(({ matches }) => {
       codes = (matches ?? []).map((match) => match.coupon.code).slice(0, MAX_CODES);
       if (!codes.length) {
