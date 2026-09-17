@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "docs/demo/engine",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "declaration": false,
+    "removeComments": false
+  },
+  "include": ["src/core/types.ts", "src/core/stores.ts", "src/core/matching.ts", "src/core/product.ts"]
+}

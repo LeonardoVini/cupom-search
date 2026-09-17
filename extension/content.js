@@ -109,17 +109,17 @@
       return;
     }
     const button = findApplyButton(field);
-    const originalTotal = readCartTotal();
+    // Total sem cupom nenhum: é contra ele que todo desconto é medido.
+    const baseline = readCartTotal();
     let best = null;
 
     for (const [index, code] of codes.entries()) {
       runButton.textContent = `Testando ${index + 1}/${codes.length}: ${code}`;
-      const before = readCartTotal() ?? originalTotal;
+      const before = readCartTotal() ?? baseline;
       lib.setNativeValue(field, code);
       button?.click();
       const after = await waitForTotalChange(before);
-      const discount = lib.discountBetween(before, after);
-      const worked = discount !== null && discount > 0;
+      const { worked, discount } = lib.evaluateAttempt({ baseline, before, after });
 
       const item = document.createElement('li');
       item.className = worked ? 'cs-win' : 'cs-lose';

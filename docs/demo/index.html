@@ -1,0 +1,648 @@
+<title>Cupom Search</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+/>
+
+<style>
+  :root {
+    --ground: #eef1f6;
+    --surface: #ffffff;
+    --surface-2: #f5f7fb;
+    --ink: #101520;
+    --muted: #5c6779;
+    --line: #dce2ec;
+    --accent: #0f7b4f;
+    --accent-soft: #e2f1e9;
+    --on-accent: #f7fbf9;
+    --warn: #8a5a06;
+    --warn-soft: #faf0dc;
+    --danger: #af3227;
+    --danger-soft: #fbe9e7;
+    --shadow: 0 1px 2px rgba(16, 21, 32, 0.06), 0 8px 24px rgba(16, 21, 32, 0.06);
+    --radius: 10px;
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0d1016;
+      --surface: #161b24;
+      --surface-2: #1d2430;
+      --ink: #e7ebf3;
+      --muted: #939eb2;
+      --line: #252c39;
+      --accent: #3ccb8c;
+      --accent-soft: #102c21;
+      --on-accent: #08110c;
+      --warn: #dfa63f;
+      --warn-soft: #2c2413;
+      --danger: #e9736a;
+      --danger-soft: #2e1817;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0d1016;
+    --surface: #161b24;
+    --surface-2: #1d2430;
+    --ink: #e7ebf3;
+    --muted: #939eb2;
+    --line: #252c39;
+    --accent: #3ccb8c;
+    --accent-soft: #102c21;
+    --on-accent: #08110c;
+    --warn: #dfa63f;
+    --warn-soft: #2c2413;
+    --danger: #e9736a;
+    --danger-soft: #2e1817;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; padding-block: 28px 56px; }
+
+  header h1 {
+    margin: 0;
+    font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  header p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+
+  .sim-note {
+    margin-top: 16px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    background: var(--warn-soft);
+    border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
+    border-radius: var(--radius);
+    padding: 11px 13px;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .sim-note strong { color: var(--warn); }
+
+  .steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 22px 0 14px;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+  }
+  .steps li {
+    flex: 1 1 200px;
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font-size: 13px;
+    color: var(--muted);
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .steps li::before {
+    counter-increment: step;
+    content: counter(step);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .steps li.done { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+  .steps li.done::before { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+
+  .grid { display: grid; gap: 16px; grid-template-columns: 1fr; align-items: start; }
+  @media (min-width: 900px) { .grid { grid-template-columns: 1.04fr 1fr; } }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .panel > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+  }
+  .panel > header h2 { margin: 0; font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; }
+  .panel > header .tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .panel .body { padding: 16px; display: grid; gap: 14px; }
+
+  label.field { display: grid; gap: 5px; font-size: 12px; color: var(--muted); }
+  input[type="url"], input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 12.5px;
+  }
+  input:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  button {
+    font-family: var(--sans);
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 10px 14px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: var(--accent);
+    color: var(--on-accent);
+    cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: var(--on-accent); }
+  button.ghost { background: var(--surface); border-color: var(--line); color: var(--ink); font-weight: 500; }
+  button[disabled] { opacity: 0.55; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+  .product { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; background: var(--surface-2); }
+  .product h3 { margin: 0 0 3px; font-size: 0.95rem; font-weight: 600; }
+  .product .meta { font-size: 12.5px; color: var(--muted); font-family: var(--mono); }
+
+  .coupons { display: grid; gap: 10px; }
+  .coupon { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; display: grid; gap: 9px; }
+  .coupon.blocked { opacity: 0.66; }
+  .coupon.proven { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .coupon .head { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+  .code {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    background: var(--surface-2);
+    border: 1px dashed var(--line);
+    border-radius: 6px;
+    padding: 4px 8px;
+  }
+  .chip {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .chip.ok { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+  .chip.demo { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: var(--warn-soft); }
+  .chip.off { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); background: var(--danger-soft); }
+
+  .desc { font-size: 13px; color: var(--muted); margin: 0; }
+
+  .meter { display: flex; align-items: center; gap: 9px; }
+  .meter .num { font-family: var(--mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 8.5ch; }
+  .track { flex: 1; height: 5px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+  .track span { display: block; height: 100%; background: var(--accent); transition: width 0.5s ease; }
+  .track.mid span { background: var(--warn); }
+  .track.low span { background: var(--danger); }
+
+  ul.why { margin: 0; padding-left: 17px; font-size: 12.5px; color: var(--muted); display: grid; gap: 2px; }
+  ul.why li.no { color: var(--danger); }
+
+  /* ---- loja simulada ---- */
+  .store { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .store .bar {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    padding: 7px 11px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface-2);
+    display: flex;
+    gap: 7px;
+    align-items: center;
+  }
+  .store .bar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+  .store .inner { padding: 13px; display: grid; gap: 7px; }
+  .line { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; }
+  .line span:last-child { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .line.total { border-top: 1px solid var(--line); padding-top: 9px; margin-top: 3px; font-weight: 700; font-size: 1.05rem; }
+  .line.total span:last-child { color: var(--accent); }
+  .line.discount span:last-child { color: var(--danger); }
+
+  #coupon-box { display: none; gap: 7px; margin-top: 7px; }
+  #coupon-box.open { display: flex; }
+  #coupon-box input { flex: 1; min-width: 0; }
+  #store-msg { font-size: 12px; min-height: 1.2em; font-family: var(--mono); }
+  #store-msg.ok { color: var(--accent); }
+  #store-msg.err { color: var(--danger); }
+  #toggle-coupon { width: 100%; background: var(--surface); border: 1px dashed var(--line); color: var(--ink); font-weight: 500; margin-top: 7px; }
+
+  .log { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-family: var(--mono); font-size: 12px; }
+  .log li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 9px; border-radius: 6px; background: var(--surface-2); }
+  .log li.win { color: var(--accent); background: var(--accent-soft); }
+  .log li.lose { color: var(--muted); }
+  .log li .v { font-variant-numeric: tabular-nums; }
+
+  .result { font-size: 13px; padding: 10px 12px; border-radius: var(--radius); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+
+  .toggle { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--muted); }
+  .toggle input { margin-top: 3px; }
+
+  footer { margin-top: 26px; font-size: 12.5px; color: var(--muted); display: grid; gap: 7px; }
+  footer code { font-family: var(--mono); font-size: 11.5px; }
+  .empty { font-size: 13px; color: var(--muted); font-style: italic; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Cupom Search</h1>
+    <p>
+      Cole o link do produto e veja quais cupons têm chance real de funcionar. Depois teste os
+      códigos no carrinho: a estimativa vira desconto medido.
+    </p>
+    <div class="sim-note">
+      <div>
+        <strong>Loja simulada.</strong> O carrinho à direita é de mentira e os códigos
+        <code>DEMO-*</code> não são cupons reais. Já o motor de ranking e a heurística da extensão
+        são o código do repositório, compilado para esta página — é ele que calcula tudo o que você vê.
+      </div>
+    </div>
+  </header>
+
+  <ol class="steps">
+    <li id="step-1">Buscar cupons pelo link do produto</li>
+    <li id="step-2">Testar os códigos no carrinho</li>
+    <li id="step-3">Ver a confiança mudar com a prova</li>
+  </ol>
+
+  <div class="grid">
+    <!-- ------------------------- o site ------------------------- -->
+    <section class="panel">
+      <header>
+        <h2>O site</h2>
+        <span class="tag">busca por link</span>
+      </header>
+      <div class="body">
+        <label class="field" for="url">Link do produto</label>
+        <input
+          id="url"
+          type="url"
+          value="https://www.pichau.com.br/mesa-gamer-pichau-kaiju-140cm-preta"
+          spellcheck="false"
+        />
+        <div class="row">
+          <button id="search" class="primary" type="button">Buscar cupons</button>
+          <button id="reset" class="ghost" type="button">Recomeçar</button>
+        </div>
+
+        <div id="product" hidden></div>
+        <div id="coupons" class="coupons"></div>
+      </div>
+    </section>
+
+    <!-- ------------------------- a loja ------------------------- -->
+    <section class="panel">
+      <header>
+        <h2>A extensão no carrinho</h2>
+        <span class="tag">loja simulada</span>
+      </header>
+      <div class="body">
+        <div class="store" id="sim-cart">
+          <div class="bar"><span class="dot"></span> www.pichau.com.br/checkout/cart</div>
+          <div class="inner">
+            <div class="line"><span>Mesa Gamer Pichau Kaiju 140cm Preta</span><span>R$ 1.299,90</span></div>
+            <div class="line"><span>Frete</span><span>R$ 0,00</span></div>
+            <div class="line discount"><span>Desconto</span><span id="sim-discount">R$ 0,00</span></div>
+            <div class="line total"><span>Total do pedido</span><span data-testid="cart-total">R$ 1.299,90</span></div>
+
+            <button id="toggle-coupon" type="button">Tenho um cupom</button>
+            <div id="coupon-box">
+              <input type="text" name="coupon_code" placeholder="Código do cupom" spellcheck="false" />
+              <button type="button" value="Aplicar" id="sim-apply">Aplicar</button>
+            </div>
+            <p id="store-msg"></p>
+          </div>
+        </div>
+
+        <label class="toggle">
+          <input type="checkbox" id="no-selector" />
+          <span>
+            Simular loja que mudou o layout: ignora o seletor salvo e força a heurística a achar o
+            campo, o botão e o total sozinha.
+          </span>
+        </label>
+
+        <div class="row">
+          <button id="test" class="primary" type="button" disabled>Testar cupons no carrinho</button>
+        </div>
+
+        <div id="panel-result"></div>
+        <ul id="log" class="log"></ul>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <div>
+      <strong>O que é real aqui:</strong> <code>matching.js</code> (regras + confiança),
+      <code>product.js</code> (lê título, preço e categoria da página) e <code>lib.js</code> (a
+      heurística que acha o campo de cupom) são os arquivos do repositório compilados para o
+      navegador. <strong>O que é simulado:</strong> a loja, o carrinho e os cupons.
+    </div>
+    <div>
+      No produto de verdade, o servidor lê a página do produto e a extensão roda dentro da loja —
+      aqui os dois vivem nesta página para você poder clicar.
+    </div>
+  </footer>
+</div>
+
+<script src="engine/lib.js"></script>
+<script type="module">
+  import { extractProduct } from './engine/product.js';
+  import { matchCoupon, rankMatches } from './engine/matching.js';
+  import { evidenceKey, emptyEvidence } from './engine/types.js';
+  import { SEED } from './engine/seed.js';
+
+  const lib = globalThis.CupomSearchLib;
+  const DAY = 86_400_000;
+  const brl = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // Página do produto que o servidor leria na loja. Aqui vai embutida.
+  const PRODUCT_HTML = `
+    <html><head><script type="application/ld+json">
+    {"@context":"https://schema.org","@type":"Product","name":"Mesa Gamer Pichau Kaiju 140cm Preta",
+     "sku":"PCH-MESA-KAIJU-140","category":"Móveis > Mesas Gamer",
+     "offers":{"@type":"Offer","price":"1299.90","priceCurrency":"BRL"}}
+    <\/script></head><body></body></html>`;
+
+  // Mesmo preparo que o provider de seed faz no servidor: datas relativas a hoje.
+  const COUPONS = SEED.filter((c) => c.storeId === 'pichau').map(
+    ({ daysUntilExpiry, daysSinceSeen, ...coupon }) => ({
+      ...coupon,
+      expiresAt: daysUntilExpiry === null ? null : new Date(Date.now() + daysUntilExpiry * DAY).toISOString(),
+      lastSeenAt: new Date(Date.now() - daysSinceSeen * DAY).toISOString(),
+      source: 'seed-demo',
+      demo: true,
+    }),
+  );
+
+  // Seletores que a extensão guarda para a Pichau (extension/stores.js).
+  const STORE_RULE = {
+    id: 'pichau',
+    couponField: 'input[name="coupon_code"], #coupon_code',
+    applyButton: 'button[value="Aplicar"]',
+    totalSelector: '[data-testid="cart-total"]',
+  };
+
+  // A "loja": só estes dois códigos dão desconto de verdade no carrinho.
+  const SUBTOTAL = 1299.9;
+  const REGRAS = { 'DEMO-PERIFERICOS10': 0.1, 'DEMO-PIX5': 0.05 };
+
+  const evidence = new Map();
+  let product = null;
+
+  const $ = (id) => document.getElementById(id);
+  const cartEl = $('sim-cart');
+
+  function el(tag, attrs, ...kids) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs ?? {})) node.setAttribute(k, v);
+    for (const kid of kids.flat()) {
+      if (kid === null || kid === undefined || kid === false) continue;
+      node.append(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+    }
+    return node;
+  }
+
+  function evidenceFor(coupon) {
+    const key = evidenceKey(coupon.storeId, coupon.code);
+    return evidence.get(key) ?? emptyEvidence(key);
+  }
+
+  function record(code, worked, discount) {
+    const key = evidenceKey('pichau', code);
+    const current = evidence.get(key) ?? emptyEvidence(key);
+    const now = new Date().toISOString();
+    if (worked) {
+      current.checkout.success += 1;
+      current.lastSuccessAt = now;
+      if (discount > 0) current.discountSamples.push(discount);
+    } else {
+      current.checkout.failure += 1;
+    }
+    current.lastAttemptAt = now;
+    evidence.set(key, current);
+  }
+
+  // ---------- render ----------
+  function renderRanking() {
+    if (!product) return;
+    const matches = rankMatches(
+      COUPONS.map((coupon) => matchCoupon(coupon, product, { sourceTrust: 0.35, evidence: evidenceFor(coupon) })),
+    );
+
+    $('product').hidden = false;
+    $('product').className = 'product';
+    $('product').replaceChildren(
+      el('h3', {}, product.title ?? 'Produto não identificado'),
+      el(
+        'p',
+        { class: 'meta' },
+        `${product.storeName} · ${product.price ? brl(product.price) : 'preço não lido'} · ${product.categories
+          .slice(0, 3)
+          .join(' · ')}`,
+      ),
+    );
+
+    $('coupons').replaceChildren(...matches.map(card));
+  }
+
+  function card(match) {
+    const { coupon, confidence, applicable, estimatedSavings, observedDiscount, reasons, blockers } = match;
+    const pct = Math.round(confidence * 100);
+    const level = pct >= 60 ? '' : pct >= 30 ? 'mid' : 'low';
+    const proven = match.evidence.checkout.success > 0;
+
+    return el(
+      'article',
+      { class: `coupon${applicable ? '' : ' blocked'}${proven ? ' proven' : ''}` },
+      el(
+        'div',
+        { class: 'head' },
+        el('span', { class: 'code' }, coupon.code),
+        el('span', { class: 'chip demo' }, 'demo'),
+        proven ? el('span', { class: 'chip ok' }, 'testado no checkout') : null,
+        observedDiscount
+          ? el('span', { class: 'chip ok' }, `${brl(observedDiscount)} confirmado`)
+          : estimatedSavings
+            ? el('span', { class: 'chip' }, `${brl(estimatedSavings)} estimado`)
+            : null,
+        !applicable ? el('span', { class: 'chip off' }, 'não vale aqui') : null,
+      ),
+      el('p', { class: 'desc' }, coupon.description),
+      el(
+        'div',
+        { class: 'meter' },
+        el('span', { class: 'num' }, `${pct}% conf.`),
+        el('div', { class: `track ${level}` }, el('span', { style: `width:${pct}%` })),
+      ),
+      el(
+        'ul',
+        { class: 'why' },
+        ...reasons.map((t) => el('li', {}, t)),
+        ...blockers.map((t) => el('li', { class: 'no' }, t)),
+      ),
+    );
+  }
+
+  // ---------- a loja simulada ----------
+  $('toggle-coupon').addEventListener('click', () => $('coupon-box').classList.add('open'));
+
+  $('sim-apply').addEventListener('click', () => {
+    const code = cartEl.querySelector('input[name="coupon_code"]').value.trim().toUpperCase();
+    const rate = REGRAS[code];
+    const desconto = rate ? Math.round(SUBTOTAL * rate * 100) / 100 : 0;
+    $('sim-discount').textContent = `- ${brl(desconto)}`;
+    cartEl.querySelector('[data-testid="cart-total"]').textContent = brl(SUBTOTAL - desconto);
+    const msg = $('store-msg');
+    msg.className = rate ? 'ok' : 'err';
+    msg.textContent = rate ? `Cupom ${code} aplicado.` : `Cupom ${code} inválido ou expirado.`;
+  });
+
+  // ---------- passo 1 ----------
+  $('search').addEventListener('click', () => {
+    product = extractProduct($('url').value.trim(), PRODUCT_HTML);
+    if (!product.storeId) {
+      $('product').hidden = false;
+      $('product').className = 'product';
+      $('product').replaceChildren(el('p', { class: 'meta' }, 'Loja fora do catálogo desta demonstração.'));
+      $('coupons').replaceChildren();
+      return;
+    }
+    renderRanking();
+    $('step-1').classList.add('done');
+    $('test').disabled = false;
+  });
+
+  // ---------- passo 2 ----------
+  $('test').addEventListener('click', async () => {
+    const button = $('test');
+    button.disabled = true;
+    $('log').replaceChildren();
+    $('panel-result').replaceChildren();
+
+    // Com a caixa marcada, nenhum seletor é passado: a heurística se vira sozinha.
+    const rule = $('no-selector').checked ? null : STORE_RULE;
+
+    lib.revealCouponField(cartEl);
+    const field = lib.findCouponField(cartEl, rule);
+    const apply = lib.findApplyButton(cartEl, rule, field);
+
+    if (!field || !apply) {
+      $('panel-result').replaceChildren(el('div', { class: 'result' }, 'Não achei o campo de cupom nesta página.'));
+      button.disabled = false;
+      return;
+    }
+
+    // Total sem cupom nenhum: é contra ele que todo desconto é medido.
+    const baseline = lib.readCartTotal(cartEl, rule);
+    let best = null;
+
+    for (const [index, coupon] of COUPONS.entries()) {
+      button.textContent = `Testando ${index + 1}/${COUPONS.length}: ${coupon.code}`;
+      const before = lib.readCartTotal(cartEl, rule);
+      lib.setNativeValue(field, coupon.code);
+      apply.click();
+      await sleep(520);
+      const after = lib.readCartTotal(cartEl, rule);
+      const { worked, discount } = lib.evaluateAttempt({ baseline, before, after });
+
+      record(coupon.code, worked, discount ?? 0);
+      $('log').append(
+        el(
+          'li',
+          { class: worked ? 'win' : 'lose' },
+          el('span', {}, coupon.code),
+          el('span', { class: 'v' }, worked ? `− ${brl(discount)}` : 'sem desconto'),
+        ),
+      );
+      if (worked && (best === null || discount > best.discount)) best = { code: coupon.code, discount };
+      renderRanking();
+    }
+
+    if (best) {
+      lib.setNativeValue(field, best.code);
+      apply.click();
+      $('panel-result').replaceChildren(
+        el('div', { class: 'result' }, `Melhor cupom: ${best.code} — economia de ${brl(best.discount)}. Já deixei aplicado.`),
+      );
+    } else {
+      $('panel-result').replaceChildren(
+        el('div', { class: 'result' }, 'Nenhum código deu desconto. Registrei isso para avisar os próximos.'),
+      );
+    }
+
+    button.textContent = 'Testar de novo';
+    button.disabled = false;
+    $('step-2').classList.add('done');
+    $('step-3').classList.add('done');
+  });
+
+  // ---------- recomeçar ----------
+  $('reset').addEventListener('click', () => {
+    evidence.clear();
+    product = null;
+    $('product').hidden = true;
+    $('coupons').replaceChildren();
+    $('log').replaceChildren();
+    $('panel-result').replaceChildren();
+    $('sim-discount').textContent = 'R$ 0,00';
+    cartEl.querySelector('[data-testid="cart-total"]').textContent = brl(SUBTOTAL);
+    cartEl.querySelector('input[name="coupon_code"]').value = '';
+    $('store-msg').textContent = '';
+    $('coupon-box').classList.remove('open');
+    $('test').disabled = true;
+    $('test').textContent = 'Testar cupons no carrinho';
+    for (const id of ['step-1', 'step-2', 'step-3']) $(id).classList.remove('done');
+  });
+
+  // Abre já com o ranking na tela: página parada não mostra nada.
+  $('search').click();
+</script>

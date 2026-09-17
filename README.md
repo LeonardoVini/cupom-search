@@ -12,9 +12,15 @@ e — quando a extensão já testou — o desconto que realmente apareceu no car
 
 ## Vendo funcionar
 
+**[Demo interativa](https://claude.ai/artifact/BBTDvUfkQn8qu2YQ8HgjVZ)** — busca pelo link, testa os
+códigos num carrinho simulado e mostra a confiança mudando. Roda o motor deste
+repositório compilado para o navegador (`npm run build:demo` gera `docs/demo/engine/`);
+a loja e os cupons é que são de mentira.
+
 ```bash
 npm run demo        # sobe em modo offline, com uma página de produto salva
 npm run screenshots # abre num Chromium de verdade e salva docs/screenshots/
+npm run build:demo  # compila o motor para a página de demonstração
 ```
 
 | A extensão no carrinho | Depois de testar |

@@ -140,3 +140,27 @@ test('campo com display:none é preterido quando há alternativa visível', () =
   `);
   assert.equal(lib.findCouponField(document, null)?.getAttribute('name'), 'cupom-visivel');
 });
+
+test('evaluateAttempt mede o desconto contra o carrinho sem cupom', () => {
+  // Primeiro código: 1299,90 -> 1169,91.
+  assert.deepEqual(lib.evaluateAttempt({ baseline: 1299.9, before: 1299.9, after: 1169.91 }), {
+    worked: true,
+    discount: 129.99,
+  });
+
+  // Segundo código, com o anterior ainda aplicado: o total sobe, mas o cupom
+  // funciona e vale R$ 65 — medir contra o total anterior diria o contrário.
+  assert.deepEqual(lib.evaluateAttempt({ baseline: 1299.9, before: 1169.91, after: 1234.9 }), {
+    worked: true,
+    discount: 65,
+  });
+});
+
+test('evaluateAttempt não credita código que a loja ignorou', () => {
+  // Nada mudou: a loja recusou, mesmo com desconto anterior ainda na tela.
+  assert.equal(lib.evaluateAttempt({ baseline: 1299.9, before: 1169.91, after: 1169.91 }).worked, false);
+  // Voltou ao total cheio: código inválido.
+  assert.equal(lib.evaluateAttempt({ baseline: 1299.9, before: 1169.91, after: 1299.9 }).worked, false);
+  // Sem leitura do total: não dá para afirmar nada.
+  assert.equal(lib.evaluateAttempt({ baseline: null, before: 1299.9, after: 1169.91 }).worked, false);
+});

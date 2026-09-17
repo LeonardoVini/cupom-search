@@ -13,7 +13,8 @@
     "test": "node --test 'tests/*.test.ts'",
     "typecheck": "tsc --noEmit",
     "screenshots": "node scripts/screenshots.ts",
-    "demo": "DEMO_OFFLINE=1 node src/api/server.ts"
+    "demo": "DEMO_OFFLINE=1 node src/api/server.ts",
+    "build:demo": "node scripts/build-demo.ts"
   },
   "devDependencies": {
     "@types/jsdom": "^30.0.0",
